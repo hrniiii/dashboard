@@ -23,7 +23,6 @@ df = pd.read_csv(DATA_PATH)  # pastikan file CSV ini ada di folder yang sama
 # Parse kolom tanggal & konversi numerik
 if "date" in df.columns:
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
-
 for col in [
     "sessions", "pageviews", "bounces", "timeOnSite",
     "transactions", "revenue", "bounce_rate", "is_organic", "is_mobile"
@@ -32,10 +31,10 @@ for col in [
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
 # Nilai unik untuk dropdown
-sources   = sorted(df["source"].dropna().unique().tolist())   if "source"   in df.columns else []
-mediums   = sorted(df["medium"].dropna().unique().tolist())   if "medium"   in df.columns else []
-devices   = sorted(df["device"].dropna().unique().tolist())   if "device"   in df.columns else []
-countries = sorted(df["country"].dropna().unique().tolist())  if "country"  in df.columns else []
+sources = sorted(df["source"].dropna().unique().tolist()) if "source" in df.columns else []
+mediums = sorted(df["medium"].dropna().unique().tolist()) if "medium" in df.columns else []
+devices = sorted(df["device"].dropna().unique().tolist()) if "device" in df.columns else []
+countries = sorted(df["country"].dropna().unique().tolist()) if "country" in df.columns else []
 
 # Daftar variabel numerik untuk Regression selector
 numeric_cols = [c for c in [
@@ -44,6 +43,18 @@ numeric_cols = [c for c in [
 ] if c in df.columns]
 if not numeric_cols:
     numeric_cols = ["sessions","pageviews"]  # fallback nama umum
+
+# ==============================
+# Tambahan: PAIR REGRESI (mengikuti app (1))
+# ==============================
+VALID_REGRESSION_PAIRS = {
+    "sessions": ["pageviews", "transactions", "revenue"],
+    "pageviews": ["transactions", "revenue"],
+    "bounce_rate": ["transactions", "revenue"],
+    "avg_session_duration": ["transactions", "revenue"],
+    "pages_per_session": ["transactions", "revenue"],
+    "transactions": ["revenue"]
+}
 
 # ==============================
 # 2) INISIALISASI APLIKASI DASH
@@ -59,7 +70,6 @@ server = app.server
 filters = dbc.Card(
     dbc.CardBody([
         html.H5("FILTER", className="card-title"),
-
         dcc.DatePickerRange(
             id="date_range",
             start_date=df["date"].min() if "date" in df.columns else None,
@@ -68,7 +78,6 @@ filters = dbc.Card(
             clearable=True
         ),
         html.Br(), html.Br(),
-
         dcc.Dropdown(id="source_dd",
                      options=[{"label": s, "value": s} for s in sources],
                      multi=True, placeholder="Pilih source"),
@@ -84,12 +93,11 @@ filters = dbc.Card(
         dcc.Dropdown(id="country_dd",
                      options=[{"label": c, "value": c} for c in countries],
                      multi=True, placeholder="Pilih negara"),
-
         html.Hr(),
         dbc.Checklist(
             id="flag_filters",
             options=[{"label": "Organic only", "value": "organic"},
-                     {"label": "Mobile only",  "value": "mobile"}],
+                     {"label": "Mobile only", "value": "mobile"}],
             value=[], switch=True
         ),
     ]), className="mb-3 shadow-sm"
@@ -108,12 +116,12 @@ def kpi_card(title, id_value, color="primary"):
     )
 
 kpi_row = dbc.Row([
-    dbc.Col(kpi_card("Sessions",     "kpi_sessions",  "primary"),  md=2),
-    dbc.Col(kpi_card("Pageviews",    "kpi_pageviews", "success"),  md=2),
-    dbc.Col(kpi_card("Bounce Rate",  "kpi_bounce",    "danger"),   md=3),
-    dbc.Col(kpi_card("Avg. Duration","kpi_duration",  "info"),     md=3),
-    dbc.Col(kpi_card("Transactions", "kpi_tx",        "warning"),  md=2),
-    dbc.Col(kpi_card("Revenue",      "kpi_rev",       "secondary"),md=3),
+    dbc.Col(kpi_card("Sessions", "kpi_sessions", "primary"), md=2),
+    dbc.Col(kpi_card("Pageviews", "kpi_pageviews", "success"), md=2),
+    dbc.Col(kpi_card("Bounce Rate", "kpi_bounce", "danger"), md=3),
+    dbc.Col(kpi_card("Avg. Duration","kpi_duration", "info"), md=3),
+    dbc.Col(kpi_card("Transactions", "kpi_tx", "warning"), md=2),
+    dbc.Col(kpi_card("Revenue", "kpi_rev", "secondary"), md=3),
 ], className="g-3")
 
 # ============
@@ -121,12 +129,12 @@ kpi_row = dbc.Row([
 # ============
 tabs = dbc.Tabs(
     [
-        dbc.Tab(label="Overview",     tab_id="tab-overview"),
-        dbc.Tab(label="Channels",     tab_id="tab-channels"),
-        dbc.Tab(label="Devices",      tab_id="tab-devices"),
-        dbc.Tab(label="Geography",    tab_id="tab-geo"),
-        dbc.Tab(label="SEO",          tab_id="tab-seo"),          # NEW
-        dbc.Tab(label="Regression",   tab_id="tab-regression"),
+        dbc.Tab(label="Overview", tab_id="tab-overview"),
+        dbc.Tab(label="Channels", tab_id="tab-channels"),
+        dbc.Tab(label="Devices", tab_id="tab-devices"),
+        dbc.Tab(label="Geography", tab_id="tab-geo"),
+        dbc.Tab(label="SEO", tab_id="tab-seo"),  # NEW
+        dbc.Tab(label="Regression", tab_id="tab-regression"),
         dbc.Tab(label="Segmentation", tab_id="tab-segmentation"),
     ],
     id="tabs", active_tab="tab-overview"
@@ -150,12 +158,8 @@ reg_controls = dbc.Card(
                 ], md=4),
                 dbc.Col([
                     html.Label("Y Variable"),
-                    dcc.Dropdown(
-                        id="reg_y",
-                        options=[{"label": c, "value": c} for c in numeric_cols],
-                        value=("pageviews" if "pageviews" in numeric_cols else (numeric_cols[0] if numeric_cols else None)),
-                        clearable=False
-                    )
+                    # Diselaraskan: opsi Y akan diisi via callback update_reg_y
+                    dcc.Dropdown(id="reg_y", clearable=False)
                 ], md=4),
                 dbc.Col([
                     html.Label("Aggregation"),
@@ -163,9 +167,9 @@ reg_controls = dbc.Card(
                         id="reg_agg",
                         options=[
                             {"label":"Raw (row-level)", "value":"raw"},
-                            {"label":"Per Day",         "value":"per_day"},
-                            {"label":"Per Channel",     "value":"per_channel"},
-                            {"label":"Per Country",     "value":"per_country"},
+                            {"label":"Per Day", "value":"per_day"},
+                            {"label":"Per Channel", "value":"per_channel"},
+                            {"label":"Per Country", "value":"per_country"},
                         ],
                         value="per_day",
                         clearable=False
@@ -197,13 +201,13 @@ def apply_filters(data, start_date, end_date, srcs, meds, devs, cnts, flags):
     dff = data.copy()
     if "date" in dff.columns:
         if start_date: dff = dff[dff["date"] >= pd.to_datetime(start_date)]
-        if end_date:   dff = dff[dff["date"] <= pd.to_datetime(end_date)]
-    if srcs and "source" in dff.columns:   dff = dff[dff["source"].isin(srcs)]
-    if meds and "medium" in dff.columns:   dff = dff[dff["medium"].isin(meds)]
-    if devs and "device" in dff.columns:   dff = dff[dff["device"].isin(devs)]
-    if cnts and "country" in dff.columns:  dff = dff[dff["country"].isin(cnts)]
+        if end_date: dff = dff[dff["date"] <= pd.to_datetime(end_date)]
+    if srcs and "source" in dff.columns: dff = dff[dff["source"].isin(srcs)]
+    if meds and "medium" in dff.columns: dff = dff[dff["medium"].isin(meds)]
+    if devs and "device" in dff.columns: dff = dff[dff["device"].isin(devs)]
+    if cnts and "country" in dff.columns: dff = dff[dff["country"].isin(cnts)]
     if "organic" in flags and "is_organic" in dff.columns: dff = dff[dff["is_organic"] == 1]
-    if "mobile"  in flags and "is_mobile"  in dff.columns: dff = dff[dff["is_mobile"]  == 1]
+    if "mobile" in flags and "is_mobile" in dff.columns: dff = dff[dff["is_mobile"] == 1]
     return dff
 
 def fmt_number(x):
@@ -235,13 +239,13 @@ def make_reg_df(dff, agg_type, x_col, y_col):
         reg = dff[[x_col, y_col]].copy()
     elif agg_type == "per_day" and "date" in dff.columns:
         reg = (dff.groupby("date", as_index=False)
-                 .agg({x_col: agg_func(x_col), y_col: agg_func(y_col)}))
+               .agg({x_col: agg_func(x_col), y_col: agg_func(y_col)}))
     elif agg_type == "per_channel" and {"source","medium"}.issubset(dff.columns):
         reg = (dff.groupby(["source","medium"], as_index=False)
-                 .agg({x_col: agg_func(x_col), y_col: agg_func(y_col)}))
+               .agg({x_col: agg_func(x_col), y_col: agg_func(y_col)}))
     elif agg_type == "per_country" and "country" in dff.columns:
         reg = (dff.groupby("country", as_index=False)
-                 .agg({x_col: agg_func(x_col), y_col: agg_func(y_col)}))
+               .agg({x_col: agg_func(x_col), y_col: agg_func(y_col)}))
     else:
         reg = dff[[x_col, y_col]].copy()  # fallback raw
 
@@ -252,31 +256,45 @@ def make_reg_df(dff, agg_type, x_col, y_col):
     return reg
 
 # =========================
+# Tambahan: CALLBACK isi opsi Y sesuai X (mengikuti app (1))
+# =========================
+@app.callback(
+    Output("reg_y", "options"),
+    Output("reg_y", "value"),
+    Input("reg_x", "value")
+)
+def update_reg_y(x):
+    if x not in VALID_REGRESSION_PAIRS:
+        return [], None
+    ys = VALID_REGRESSION_PAIRS[x]
+    return [{"label": y, "value": y} for y in ys], ys[0]
+
+# =========================
 # 8) CALLBACK UTAMA DASH
 # =========================
 @callback(
     [
-        Output("kpi_sessions",  "children"),
+        Output("kpi_sessions", "children"),
         Output("kpi_pageviews", "children"),
-        Output("kpi_bounce",    "children"),
-        Output("kpi_duration",  "children"),
-        Output("kpi_tx",        "children"),
-        Output("kpi_rev",       "children"),
+        Output("kpi_bounce", "children"),
+        Output("kpi_duration", "children"),
+        Output("kpi_tx", "children"),
+        Output("kpi_rev", "children"),
         Output("graphs_container", "children"),
         Output("reg_controls", "style"),  # NEW: tampil/sembunyi kontrol regression
     ],
     [
         Input("date_range", "start_date"),
         Input("date_range", "end_date"),
-        Input("source_dd",  "value"),
-        Input("medium_dd",  "value"),
-        Input("device_dd",  "value"),
+        Input("source_dd", "value"),
+        Input("medium_dd", "value"),
+        Input("device_dd", "value"),
         Input("country_dd", "value"),
         Input("flag_filters","value"),
-        Input("tabs",       "active_tab"),
-        Input("reg_x",      "value"),
-        Input("reg_y",      "value"),
-        Input("reg_agg",    "value"),
+        Input("tabs", "active_tab"),
+        Input("reg_x", "value"),
+        Input("reg_y", "value"),
+        Input("reg_agg", "value"),
     ]
 )
 def update_dashboard(start_date, end_date, srcs, meds, devs, cnts, flags,
@@ -285,9 +303,8 @@ def update_dashboard(start_date, end_date, srcs, meds, devs, cnts, flags,
     dff = apply_filters(df, start_date, end_date, srcs, meds, devs, cnts, flags)
 
     # === KPI (NaN-safe) ===
-    sessions  = dff["sessions"].sum()  if "sessions"  in dff.columns else 0
+    sessions = dff["sessions"].sum() if "sessions" in dff.columns else 0
     pageviews = dff["pageviews"].sum() if "pageviews" in dff.columns else 0
-
     if {"bounces","sessions"}.issubset(dff.columns) and sessions > 0:
         brate = (float(dff["bounces"].sum()) / float(sessions)) * 100.0
     elif "bounce_rate" in dff.columns and len(dff) > 0:
@@ -295,17 +312,16 @@ def update_dashboard(start_date, end_date, srcs, meds, devs, cnts, flags,
         brate = (mean_br * 100.0) if (isinstance(mean_br, (int,float)) and mean_br <= 1) else float(mean_br)
     else:
         brate = 0.0
-
     avg_dur = dff["timeOnSite"].mean() if "timeOnSite" in dff.columns and len(dff) > 0 else None
-    tx      = dff["transactions"].sum() if "transactions" in dff.columns else 0
-    rev     = dff["revenue"].sum()      if "revenue"      in dff.columns else 0.0
+    tx = dff["transactions"].sum() if "transactions" in dff.columns else 0
+    rev = dff["revenue"].sum() if "revenue" in dff.columns else 0.0
 
-    kpi_sessions  = fmt_number(sessions)
+    kpi_sessions = fmt_number(sessions)
     kpi_pageviews = fmt_number(pageviews)
-    kpi_bounce    = f"{brate:.1f}%"
-    kpi_duration  = fmt_duration(avg_dur)
-    kpi_tx        = fmt_number(tx)
-    kpi_rev       = fmt_currency(rev)
+    kpi_bounce = f"{brate:.1f}%"
+    kpi_duration = fmt_duration(avg_dur)
+    kpi_tx = fmt_number(tx)
+    kpi_rev = fmt_currency(rev)
 
     graphs = []
     reg_controls_style = {"display": "none"}  # default disembunyikan
@@ -328,9 +344,9 @@ def update_dashboard(start_date, end_date, srcs, meds, devs, cnts, flags,
     elif active_tab == "tab-channels":
         if {"source","medium","sessions"}.issubset(dff.columns):
             chan = (dff.groupby(["source","medium"], as_index=False)
-                      .agg({"sessions":"sum"})
-                      .sort_values("sessions", ascending=False)
-                      .head(20))
+                    .agg({"sessions":"sum"})
+                    .sort_values("sessions", ascending=False)
+                    .head(20))
             fig_chan = px.bar(
                 chan, x="source", y="sessions", color="medium",
                 title="Top Channels (Sessions)",
@@ -382,7 +398,7 @@ def update_dashboard(start_date, end_date, srcs, meds, devs, cnts, flags,
                     "bounce_rate":"mean" if "bounce_rate" in seo_df.columns else "mean"
                 })
                 agg["pages_per_session"] = agg["pageviews"] / agg["sessions"]
-                agg["conversion_rate"]   = (agg["transactions"] / agg["sessions"]) * 100.0 if "transactions" in agg.columns else 0.0
+                agg["conversion_rate"] = (agg["transactions"] / agg["sessions"]) * 100.0 if "transactions" in agg.columns else 0.0
                 if "bounces" in agg.columns:
                     agg["bounce_rate_pct"] = (agg["bounces"] / agg["sessions"]) * 100.0
                 else:
@@ -420,59 +436,48 @@ def update_dashboard(start_date, end_date, srcs, meds, devs, cnts, flags,
         else:
             graphs = [html.Div("Kolom 'medium' tidak tersedia.", className="text-danger")]
 
-    # Regression: pakai selector X–Y & tipe agregasi (kontrol ditampilkan di layout)
+    # Regression: diselaraskan dengan app (1) — gunakan VALID_REGRESSION_PAIRS
     elif active_tab == "tab-regression":
         reg_controls_style = {"display": "block"}  # tampilkan kontrol saat tab-regression
-        try:
-            # Default value jika None
-            if reg_x is None or reg_x not in numeric_cols: reg_x = "sessions" if "sessions" in numeric_cols else numeric_cols[0]
-            if reg_y is None or reg_y not in numeric_cols: reg_y = "pageviews" if "pageviews" in numeric_cols else numeric_cols[0]
-            if reg_agg is None: reg_agg = "per_day"
 
+        # ======= DEFAULTS SESUAI PAIR =======
+        if reg_x is None or reg_x not in VALID_REGRESSION_PAIRS:
+            reg_x = list(VALID_REGRESSION_PAIRS.keys())[0]
+        valid_y = VALID_REGRESSION_PAIRS.get(reg_x, [])
+        if reg_y not in valid_y:
+            reg_y = valid_y[0] if valid_y else None
+
+        # Guard ketika Y belum siap
+        if reg_x is None or reg_y is None:
+            return (kpi_sessions, kpi_pageviews, kpi_bounce, kpi_duration, kpi_tx, kpi_rev,
+                    html.Div(), reg_controls_style)
+
+        try:
+            if reg_agg is None: reg_agg = "per_day"
             reg = make_reg_df(dff, reg_agg, reg_x, reg_y)
+
             if len(reg) >= 5 and reg[reg_x].nunique() > 1:
                 X = reg[[reg_x]].values
                 y = reg[reg_y].values
 
-                lr = LinearRegression(); lr.fit(X, y)
-                slope, intercept = float(lr.coef_[0]), float(lr.intercept_)
-                r2 = float(lr.score(X, y))
-
-                x_line = np.linspace(float(X.min()), float(X.max()), 100).reshape(-1,1)
+                lr = LinearRegression().fit(X, y)
+                x_line = np.linspace(float(X.min()), float(X.max()), 100).reshape(-1, 1)
                 y_line = lr.predict(x_line)
 
                 fig_reg = px.scatter(
                     reg, x=reg_x, y=reg_y,
                     labels={reg_x: reg_x, reg_y: reg_y},
-                    title=(f"Linear Regression ({reg_agg}): {reg_y} ~ {reg_x}"
-                           f"<br><sup>Ŷ = {intercept:.2f} + {slope:.4f}·{reg_x},  R² = {r2:.3f}</sup>"),
+                    title=f"{reg_y} ~ {reg_x} ({reg_agg})",
                     template="plotly_white"
                 )
                 fig_reg.add_traces(px.line(x=x_line.ravel(), y=y_line).data)
 
-                y_pred = lr.predict(X); resid = y - y_pred
-                fig_resid = px.scatter(
-                    x=y_pred, y=resid,
-                    labels={"x":f"Predicted {reg_y}","y":"Residuals"},
-                    title="Residuals vs Predicted",
-                    template="plotly_white"
-                )
-                fig_resid.add_hline(y=0, line_dash="dot", line_color="gray")
-
-                graphs = [
-                    dbc.Row([dbc.Col(dcc.Graph(figure=fig_reg),   md=12)]),
-                    dbc.Row([dbc.Col(dcc.Graph(figure=fig_resid), md=12)]),
-                ]
+                graphs = [dbc.Row([dbc.Col(dcc.Graph(figure=fig_reg), md=12)])]
             else:
-                graphs = [html.Div("Data untuk regresi belum memadai (baris < 5 atau X tidak bervariasi). "
-                                   "Coba ubah aggregation/variabel atau perlebar filter.",
-                                   className="text-warning")]
+                graphs = [html.Div("Data untuk regresi belum memadai.", className="text-warning")]
+
         except Exception:
-            graphs = [
-                html.Div("Terjadi error saat menjalankan regresi:", className="text-danger"),
-                html.Pre(traceback.format_exc(),
-                         style={"whiteSpace":"pre-wrap","fontSize":"12px"})
-            ]
+            graphs = [html.Pre(traceback.format_exc(), style={"whiteSpace":"pre-wrap"})]
 
     # Segmentation: K-Means (k=3) pada fitur numerik
     elif active_tab == "tab-segmentation":
@@ -484,16 +489,13 @@ def update_dashboard(start_date, end_date, srcs, meds, devs, cnts, flags,
             else:
                 scaler = StandardScaler()
                 Xs = scaler.fit_transform(seg.values)
-
                 kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
                 labels = kmeans.fit_predict(Xs)
                 seg = seg.assign(cluster=labels)
-
                 if {"sessions","pageviews"}.issubset(seg.columns):
                     hover_cols = [c for c in ["source","medium","device","country"] if c in dff.columns]
                     seg_full = dff.loc[seg.index, hover_cols].copy()
                     plot_df = pd.concat([seg[["sessions","pageviews","cluster"]], seg_full], axis=1)
-
                     fig_km = px.scatter(
                         plot_df, x="sessions", y="pageviews", color="cluster",
                         hover_data=hover_cols,
@@ -502,7 +504,6 @@ def update_dashboard(start_date, end_date, srcs, meds, devs, cnts, flags,
                     )
                 else:
                     fig_km = px.scatter(title="Butuh sessions & pageviews untuk visualisasi utama.", template="plotly_white")
-
                 graphs = [dbc.Row([dbc.Col(dcc.Graph(figure=fig_km), md=12)])]
         else:
             graphs = [html.Div("Clustering butuh ≥2 fitur numerik dan ≥10 baris data.", className="text-danger")]
